@@ -1,14 +1,15 @@
 # test_weather.py
-# test_weather.py
 from MR_testing.test_cases.background.base_background import BaseBackgroundTest
 from pathlib import Path
 import json
 import argparse
 from datetime import datetime
-from transformers import AutoProcessor, LlavaForConditionalGeneration
+from MR_testing.models_to_test.init_models import load_llava_model
 import torch
+import random
+import os
 
-class WeatherTest:
+class WeatherTestRunner:
     def __init__(self, config_path: str, llm_evaluator=None):
         # Load configuration
         with open(config_path, 'r') as f:
@@ -23,11 +24,33 @@ class WeatherTest:
             llm_evaluator=self.llm_evaluator
         )
 
-    def run_test(self, image_path: str, point_coords: tuple, selected_variations: list = None):
+    def get_random_image_and_annotations(self, images_dir, annotations_path):
+        """Select a random image from the directory and get its annotations."""
+        # List all images in the directory
+        images = [f for f in os.listdir(images_dir) if f.endswith('.jpg')]
+        if not images:
+            raise ValueError("No images found in the specified directory.")
+
+        # Select a random image
+        selected_image = random.choice(images)
+        image_path = os.path.join(images_dir, selected_image)
+
+        # Get the image ID from the file name (assuming the file name is the image ID)
+        image_id = int(os.path.splitext(selected_image)[0])
+
+        # Get coordinates from annotations
+        point_coords = self.base_test.get_coordinates_from_annotations(annotations_path, image_id)
+
+        return image_path, point_coords, image_id
+
+    def run_test(self, images_dir: str, annotations_path: str, selected_variations: list = None):
         """Run weather variation tests."""
         if not self.llm_evaluator:
             print("Warning: No LLM evaluator provided. Please initialize with LLaVA before running tests.")
             return
+
+        # Get a random image and its annotations
+        image_path, point_coords, image_id = self.get_random_image_and_annotations(images_dir, annotations_path)
 
         # Get variations to test
         variations = self.config['variations']
@@ -89,29 +112,22 @@ class WeatherTest:
 
 def main():
     parser = argparse.ArgumentParser(description="Run weather variation tests")
-    parser.add_argument("--image", required=True, help="Path to input image")
-    parser.add_argument("--config", default="test_cases/background/configs/weather_config.json",
+    parser.add_argument("--images_dir", required=True, help="Path to directory containing images")
+    parser.add_argument("--annotations", required=True, help="Path to COCO annotations file")
+    parser.add_argument("--config", default="/workspaces/Advanced-MRs-for-VLMs/MR_testing/test_cases/background/configs/weather_config.json",
                        help="Path to weather test configuration")
-    parser.add_argument("--coords", nargs=2, type=int, default=[750, 500],
-                       help="Point coordinates (x y)")
     parser.add_argument("--variations", nargs="+", 
                        choices=["rainy", "snowy", "foggy", "sunny", "stormy"],
                        help="Specific weather variations to test")
 
     args = parser.parse_args()
 
-    # Initialize LLaVa
-    model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
-    processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
-
-    llava_evaluator = {
-        "model": model,
-        "processor": processor
-    }
+    # Load LLaVa model
+    llava_evaluator = load_llava_model("/workspaces/Advanced-MRs-for-VLMs/MR_testing/models_to_test/llava_config.json")
     
     # Create and run tests
-    tester = WeatherTest(args.config, llava_evaluator)
-    tester.run_test(args.image, tuple(args.coords), args.variations)
+    tester = WeatherTestRunner(args.config, llava_evaluator)
+    tester.run_test(args.images_dir, args.annotations, args.variations)
 
 if __name__ == "__main__":
     main()

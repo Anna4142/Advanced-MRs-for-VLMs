@@ -1,5 +1,3 @@
-# test_cases/background/base_background_test.py
-
 from MR_testing.test_cases.base_metamorphic import BaseMetamorphicTest
 from PIL import Image
 from typing import Dict, Any, Tuple
@@ -7,6 +5,7 @@ from pathlib import Path
 import subprocess
 import torch
 from transformers import AutoProcessor, LlavaForConditionalGeneration
+import json
 
 class BaseBackgroundTest(BaseMetamorphicTest):
     """Base class for background variation tests focusing on object identity."""
@@ -86,6 +85,21 @@ class BaseBackgroundTest(BaseMetamorphicTest):
             'identity_preserved': original_object.lower() == result_object.lower()
         }
 
+    def get_coordinates_from_annotations(self, annotations_path, image_id):
+        """Extract coordinates from COCO annotations."""
+        with open(annotations_path, 'r') as f:
+            annotations = json.load(f)
+        
+        for annotation in annotations['annotations']:
+            if annotation['image_id'] == image_id:
+                bbox = annotation['bbox']
+                # COCO format is [x, y, width, height]
+                x_center = bbox[0] + bbox[2] / 2
+                y_center = bbox[1] + bbox[3] / 2
+                return (int(x_center), int(y_center))
+        
+        raise ValueError(f"No annotations found for image_id {image_id}")
+
     def execute_test(self, test_case: Dict) -> Dict[str, Any]:
         """Execute the test and return results."""
         image_path = Path(test_case['image_path'])
@@ -120,16 +134,10 @@ class BaseBackgroundTest(BaseMetamorphicTest):
                 'status': 'failed',
                 'error': result['error']
             }
-'''
-if __name__ == "__main__":
-    # Initialize test
-    test = BaseBackgroundTest(llm_evaluator)
-    
-    # Test weather variations
-    weather_result = test.run_test(
-        image_path="test_cases/background/images/scene.jpg",
-        point_coords=[750, 500],
-        test_type="weather",
-        selected_variations=["rainy", "sunny"]  # Optional: test specific variations
-    )
-    '''
+
+    def verify_relations(self, original: Image.Image, result: Image.Image, test_case: Dict) -> Dict[str, bool]:
+        """Verify relations between original and result image."""
+        identity_check = self.compare_identity(original, result)
+        return {
+            'identity_preserved': identity_check['identity_preserved']
+        }
