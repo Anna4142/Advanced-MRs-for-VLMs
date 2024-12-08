@@ -1,0 +1,5 @@
+{
+    "model_id": "llava-hf/llava-1.5-7b-hf",
+    "torch_dtype": "float16",
+    "device_map": "auto"
+}
