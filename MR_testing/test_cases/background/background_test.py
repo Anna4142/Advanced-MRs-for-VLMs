@@ -1,4 +1,5 @@
 # test_weather.py
+# test_weather.py
 from MR_testing.test_cases.background.base_background import BaseBackgroundTest
 from pathlib import Path
 import json
@@ -10,22 +11,30 @@ import random
 import os
 
 class WeatherTestRunner:
-    def __init__(self, config_path: str, llm_evaluator=None):
+    def __init__(self, config_path: str, llm_evaluator=None, model=None, processor=None, replace_script=None, sam_weights=None):
+        print("Initializing WeatherTestRunner...")
         # Load configuration
         with open(config_path, 'r') as f:
             self.config = json.load(f)
-            
+        print("Configuration loaded.")
+        
         # Initialize with provided evaluator (will be LLaVA)
         self.llm_evaluator = llm_evaluator
         
         # Initialize base test
         self.base_test = BaseBackgroundTest(
             config=self.config['default_params'],
-            llm_evaluator=self.llm_evaluator
+            llm_evaluator=self.llm_evaluator,
+            model=model,
+            processor=processor,
+            replace_script=replace_script,
+            sam_weights=sam_weights
         )
+        print("BaseBackgroundTest initialized.")
 
     def get_random_image_and_annotations(self, images_dir, annotations_path):
         """Select a random image from the directory and get its annotations."""
+        print("Selecting a random image from the directory...")
         # List all images in the directory
         images = [f for f in os.listdir(images_dir) if f.endswith('.jpg')]
         if not images:
@@ -34,17 +43,21 @@ class WeatherTestRunner:
         # Select a random image
         selected_image = random.choice(images)
         image_path = os.path.join(images_dir, selected_image)
+        print(f"Selected image: {image_path}")
 
         # Get the image ID from the file name (assuming the file name is the image ID)
         image_id = int(os.path.splitext(selected_image)[0])
+        print(f"Image ID: {image_id}")
 
         # Get coordinates from annotations
         point_coords = self.base_test.get_coordinates_from_annotations(annotations_path, image_id)
+        print(f"Point coordinates: {point_coords}")
 
         return image_path, point_coords, image_id
 
     def run_test(self, images_dir: str, annotations_path: str, selected_variations: list = None):
         """Run weather variation tests."""
+        print("Running weather variation tests...")
         if not self.llm_evaluator:
             print("Warning: No LLM evaluator provided. Please initialize with LLaVA before running tests.")
             return
@@ -101,6 +114,7 @@ class WeatherTestRunner:
                 'variations_tested': list(variations.keys()),
                 'results': results
             }, f, indent=2)
+        print(f"Results saved to: {results_dir}/weather_test_results_{timestamp}.json")
 
         # Print summary
         print("\nTest Summary:")
@@ -108,7 +122,6 @@ class WeatherTestRunner:
         successful_tests = sum(1 for r in results if r['result']['identity_preserved'])
         print(f"Total variations tested: {len(results)}")
         print(f"Successful identity preservation: {successful_tests}/{len(results)}")
-        print(f"Results saved to: {results_dir}/weather_test_results_{timestamp}.json")
 
 def main():
     parser = argparse.ArgumentParser(description="Run weather variation tests")
@@ -123,10 +136,18 @@ def main():
     args = parser.parse_args()
 
     # Load LLaVa model
+    print("Loading LLaVa model...")
     llava_evaluator = load_llava_model("/workspaces/Advanced-MRs-for-VLMs/MR_testing/models_to_test/llava_config.json")
+    model = llava_evaluator["model"]
+    processor = llava_evaluator["processor"]
+    replace_script = "/workspaces/Advanced-MRs-for-VLMs/replace_anything.py"
+    sam_weights = "/workspaces/Advanced-MRs-for-VLMs/weights/mobile_sam.pt"
+    print("LLaVa model loaded.")
     
     # Create and run tests
-    tester = WeatherTestRunner(args.config, llava_evaluator)
+    print("Creating WeatherTestRunner...")
+    tester = WeatherTestRunner(args.config, llava_evaluator, model, processor, replace_script, sam_weights)
+    print("Running tests...")
     tester.run_test(args.images_dir, args.annotations, args.variations)
 
 if __name__ == "__main__":
